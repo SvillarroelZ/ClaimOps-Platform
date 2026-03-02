@@ -408,24 +408,127 @@ aws dynamodb list-tables | grep claimsops
 
 ---
 
+## Decisiones de Diseño (Por Qué Estas Elecciones)
+
+### ¿Por qué DynamoDB en vez de RDS/PostgreSQL?
+
+**Decisión**: DynamoDB con facturación PAY_PER_REQUEST.
+
+**Razonamiento**:
+- Los eventos de auditoría son impredecibles (escrituras esporádicas, no constantes)
+- No se necesitan joins SQL o transacciones complejas
+- Auto-escalamiento sin planificación de capacidad
+- DynamoDB Streams habilita procesamiento de eventos en tiempo real (integración Lambda)
+- Menor costo con volumen bajo (free tier cubre 25GB)
+
+**Compromiso**: RDS sería mejor para consultas complejas o si necesitas transacciones ACID entre múltiples tablas.
+
+### ¿Por qué PAY_PER_REQUEST en vez de PROVISIONED?
+
+**Decisión**: Modo de facturación PAY_PER_REQUEST para DynamoDB.
+
+**Razonamiento**:
+- Volumen impredecible de procesamiento de reclamos (picos durante inscripción abierta, silencio en otros momentos)
+- Sin capacidad desperdiciada durante períodos de bajo uso
+- Operaciones más simples (no necesita ajuste de capacidad)
+- Escala automáticamente para manejar picos de tráfico
+
+**Compromiso**: PROVISIONED es más barato con volúmenes sostenidos altos (1M+ solicitudes/mes). Cambiar si el uso se vuelve predecible.
+
+### ¿Por qué Diseño Modular (3 módulos separados)?
+
+**Decisión**: Módulos separados para IAM, S3, DynamoDB en vez de main.tf monolítico.
+
+**Razonamiento**:
+- Cada módulo puede probarse independientemente
+- Los módulos son reutilizables entre proyectos
+- Cambios en S3 no arriesgan romper configuración de DynamoDB
+- Más fácil de entender (cada módulo tiene responsabilidad única)
+- Miembros del equipo pueden ser dueños de diferentes módulos (equipo IAM, equipo storage)
+
+**Compromiso**: Más archivos para administrar. Para proyectos pequeños, un solo main.tf podría ser más simple.
+
+### ¿Por qué Guardia de Seguridad (enable_resources = false)?
+
+**Decisión**: Por defecto no crear recursos a menos que se habilite explícitamente.
+
+**Razonamiento**:
+- Previene creación accidental de infraestructura en desarrollo
+- Seguro para validación en CI/CD (terraform plan no te sorprenderá)
+- Fuerza decisión intencional antes de gastar dinero
+- Proyectos educativos pueden validar sin cuenta AWS
+
+**Compromiso**: Paso extra para habilitar recursos. Pero esto es una característica, no un error.
+
+### ¿Por qué Backend Local en vez de Backend Remoto S3?
+
+**Decisión**: Archivo local terraform.tfstate (Fase 1). Backend S3 planeado para Fase 2.
+
+**Razonamiento**:
+- Configuración más simple para desarrollador único o propósitos de estudio
+- Sin dependencia de bucket S3 externo
+- Iteración más rápida durante desarrollo
+
+**Compromiso**:
+- State file no compartido (no se puede colaborar fácilmente)
+- Sin bloqueo de estado (riesgo de modificaciones concurrentes)
+- State file podría perderse si la máquina falla
+
+**Ruta de migración**: Cuando el equipo crezca o se necesite preparación para producción, migrar a backend S3 + bloqueo DynamoDB.
+
+### ¿Por qué AES256 en vez de Claves KMS?
+
+**Decisión**: Encriptación AES256 administrada por AWS para S3. KMS planeado para Fase 4.
+
+**Razonamiento**:
+- AES256 es gratis y automático
+- Suficiente para la mayoría de casos de uso (encriptación en reposo)
+- Sin sobrecarga de administración de claves
+- Cumplimiento más simple para cargas de trabajo no reguladas
+
+**Compromiso**:
+- No se puede auditar acceso a claves (sin eventos CloudTrail para uso de claves)
+- No se pueden rotar claves en calendario personalizado
+- Podría no cumplir requisitos PCI-DSS o HIPAA
+
+**Ruta de migración**: Si el cumplimiento requiere claves administradas por cliente, cambiar a KMS en Fase 4.
+
+### ¿Por qué IAM de Privilegio Mínimo?
+
+**Decisión**: Política IAM restringida solo a recursos claimsops-*.
+
+**Razonamiento**:
+- Limita radio de explosión si las credenciales se filtran
+- No puede borrar accidentalmente recursos no relacionados
+- Sigue mejores prácticas de AWS (principio de privilegio mínimo)
+- Más fácil de auditar (permisos son explícitos y mínimos)
+
+**Ejemplo**: Si el rol se ve comprometido, el atacante solo puede acceder a buckets claimsops-exports-*, no a todos los buckets S3.
+
+---
+
 ## Fases del Proyecto
 
 Fase 1 (Actual): MVP con guardia de seguridad
 - Estructura Terraform, diseño modular
 - Guardia de seguridad (enable_resources=false)
 - Recursos core (IAM, S3, DynamoDB)
+- Backend local para simplicidad
 
 Fase 2 (Planeada): Backend de estado remoto
 - Migrar de local a S3 + bloqueo DynamoDB
 - Habilita colaboración en equipo
+- Versionamiento y backup de estado
 
 Fase 3 (Planeada): Pipeline de validación CI/CD
 - GitHub Actions: terraform validate en cada PR
 - Auto-plan, aprobación manual para apply
+- Previene errores manuales
 
 Fase 4 (Planeada): Seguridad avanzada
 - Claves KMS para encriptación (vs AES256)
 - Mejor audit trail y rotación de claves
+- Listo para cumplimiento
 
 ---
 
@@ -433,6 +536,8 @@ Fase 4 (Planeada): Seguridad avanzada
 
 | Archivo | Propósito |
 |---------|-----------|
+| README.md | Documentación completa (Inglés) |
+| README.es.md | Documentación completa (Español) |
 | infra/terraform/providers.tf | Versión AWS provider, backend local |
 | infra/terraform/variables.tf | Todas las variables de entrada con validación |
 | infra/terraform/main.tf | Llamadas a módulos |
@@ -441,8 +546,6 @@ Fase 4 (Planeada): Seguridad avanzada
 | infra/terraform/modules/s3/main.tf | Bucket S3 con encriptación |
 | infra/terraform/modules/dynamodb/main.tf | Tabla DynamoDB con streams |
 | .gitignore | Protege state file y secretos |
-| docs/architecture.md | Detalles de diseño del sistema |
-| docs/costs.md | Desglose detallado de costos |
 
 ---
 

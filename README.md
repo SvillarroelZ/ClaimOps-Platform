@@ -408,24 +408,127 @@ aws dynamodb list-tables | grep claimsops
 
 ---
 
+## Design Decisions (Why These Choices)
+
+### Why DynamoDB instead of RDS/PostgreSQL?
+
+**Decision**: DynamoDB with PAY_PER_REQUEST billing.
+
+**Reasoning**:
+- Audit events are unpredictable (sporadic writes, not constant)
+- No need for SQL joins or complex transactions
+- Auto-scaling without capacity planning
+- DynamoDB Streams enable real-time event processing (Lambda integration)
+- Lower cost at low volume (free tier covers 25GB)
+
+**Trade-off**: RDS would be better for complex queries or if you need ACID transactions across multiple tables.
+
+### Why PAY_PER_REQUEST instead of PROVISIONED?
+
+**Decision**: PAY_PER_REQUEST billing mode for DynamoDB.
+
+**Reasoning**:
+- Unpredictable claim processing volume (spikes during open enrollment, quiet otherwise)
+- No wasted capacity during low-usage periods
+- Simpler operations (no capacity tuning needed)
+- Automatically scales to handle traffic spikes
+
+**Trade-off**: PROVISIONED is cheaper at sustained high volumes (1M+ requests/month). Switch if usage becomes predictable.
+
+### Why Modular Design (3 separate modules)?
+
+**Decision**: Separate modules for IAM, S3, DynamoDB instead of monolithic main.tf.
+
+**Reasoning**:
+- Each module can be tested independently
+- Modules are reusable across projects
+- Changes to S3 don't risk breaking DynamoDB configuration
+- Easier to understand (each module has single responsibility)
+- Team members can own different modules (IAM team, storage team)
+
+**Trade-off**: More files to manage. For tiny projects, single main.tf might be simpler.
+
+### Why Safety Guard (enable_resources = false)?
+
+**Decision**: Default to no resource creation unless explicitly enabled.
+
+**Reasoning**:
+- Prevents accidental infrastructure creation in development
+- Safe for CI/CD validation (terraform plan won't surprise you)
+- Forces intentional decision before spending money
+- Educational projects can validate without AWS account
+
+**Trade-off**: Extra step to enable resources. But this is a feature, not a bug.
+
+### Why Local Backend instead of S3 Remote Backend?
+
+**Decision**: Local terraform.tfstate file (Phase 1). S3 backend planned for Phase 2.
+
+**Reasoning**:
+- Simpler setup for single developer or study purposes
+- No dependency on external S3 bucket
+- Faster iteration during development
+
+**Trade-off**: 
+- State file not shared (can't collaborate easily)
+- No state locking (risk of concurrent modifications)
+- State file could be lost if machine fails
+
+**Migration path**: When team grows or production readiness needed, migrate to S3 + DynamoDB lock backend.
+
+### Why AES256 instead of KMS Keys?
+
+**Decision**: AWS-managed AES256 encryption for S3. KMS planned for Phase 4.
+
+**Reasoning**:
+- AES256 is free and automatic
+- Sufficient for most use cases (encryption at rest)
+- No key management overhead
+- Simpler compliance for non-regulated workloads
+
+**Trade-off**:
+- Cannot audit key access (no CloudTrail events for key usage)
+- Cannot rotate keys on custom schedule
+- May not meet PCI-DSS or HIPAA requirements
+
+**Migration path**: If compliance requires customer-managed keys, switch to KMS in Phase 4.
+
+### Why Least-Privilege IAM?
+
+**Decision**: IAM policy restricted to claimsops-* resources only.
+
+**Reasoning**:
+- Limits blast radius if credentials leak
+- Cannot accidentally delete unrelated resources
+- Follows AWS best practices (principle of least privilege)
+- Easier to audit (permissions are explicit and minimal)
+
+**Example**: If role is compromised, attacker can only access claimsops-exports-* buckets, not all S3 buckets.
+
+---
+
 ## Project Phases
 
 Phase 1 (Current): MVP with safety guard
 - Terraform structure, modular design
 - Safety guard (enable_resources=false)
 - Core resources (IAM, S3, DynamoDB)
+- Local backend for simplicity
 
 Phase 2 (Planned): Remote state backend
 - Migrate from local to S3 + DynamoDB lock
 - Enables team collaboration
+- State versioning and backup
 
 Phase 3 (Planned): CI/CD validation pipeline
 - GitHub Actions: terraform validate on PR
 - Auto-plan, manual approval for apply
+- Prevents manual errors
 
 Phase 4 (Planned): Advanced security
 - KMS keys for encryption (vs AES256)
 - Better audit trail and key rotation
+- Compliance-ready
 
 ---
 
@@ -433,6 +536,8 @@ Phase 4 (Planned): Advanced security
 
 | File | Purpose |
 |------|---------|
+| README.md | Complete documentation (English) |
+| README.es.md | Complete documentation (Spanish) |
 | infra/terraform/providers.tf | AWS provider version, local backend |
 | infra/terraform/variables.tf | All input variables with validation |
 | infra/terraform/main.tf | Module calls |
@@ -441,8 +546,6 @@ Phase 4 (Planned): Advanced security
 | infra/terraform/modules/s3/main.tf | S3 bucket with encryption |
 | infra/terraform/modules/dynamodb/main.tf | DynamoDB table with streams |
 | .gitignore | Protects state file and secrets |
-| docs/architecture.md | System design details |
-| docs/costs.md | Detailed cost breakdown |
 
 ---
 
