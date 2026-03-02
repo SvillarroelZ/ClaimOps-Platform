@@ -1,0 +1,60 @@
+# Terraform state files (contains sensitive information)
+terraform.tfstate
+terraform.tfstate.*
+*.tfstate
+*.tfstate.backup
+
+# Terraform directories (contains provider binaries)
+.terraform/
+.terraform.lock.hcl
+
+# Terraform plan files
+*.tfplan
+tfplan
+
+# Local Terraform configuration (user-specific)
+terraform.tfvars
+!terraform.tfvars.example
+
+# IDE and editor files
+.vscode/
+.idea/
+*.swp
+*.swo
+*.swn
+*~
+.DS_Store
+.env
+.env.local
+.env.*.local
+
+# OS specific files
+.AppleDouble
+.LSOverride
+
+# Temporary files
+*.tmp
+*.temp
+*.log
+*.bak
+
+# Python cache (if using Python-based tooling)
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Node modules (if using Node.js tooling)
+node_modules/
+npm-debug.log
+yarn-error.log
+
+# Go binaries (if using Go tooling)
+*.exe
+*.exe~
+*.dll
+*.so
+*.so.*
+*.dylib
+
+# Crash dumps
+crash.dump
