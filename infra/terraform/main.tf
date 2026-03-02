@@ -21,3 +21,13 @@ module "iam" {
   project_name = var.project_name
   environment  = var.environment
 }
+
+module "s3" {
+  source = "./modules/s3"
+
+  project_name        = var.project_name
+  environment         = var.environment
+  enable_versioning   = var.enable_versioning
+  block_public_access = true
+  enable_encryption   = true
+}
