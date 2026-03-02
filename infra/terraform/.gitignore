@@ -1,11 +1,17 @@
-# Terraform files
-.terraform/
-.terraform.lock.hcl
-.terraform.tfvars
+# Terraform state files
 *.tfstate
 *.tfstate.*
 terraform.tfstate
 terraform.tfstate.backup
+
+# Terraform lock file
+.terraform.lock.hcl
+
+# Terraform directories
+.terraform/
+.terraform.d/
+
+# Logs
 crash.log
 crash.*.log
 override.tf
@@ -13,18 +19,19 @@ override.tf.json
 *_override.tf
 *_override.tf.json
 
+# Local environment overrides
+*.tfvars
+!example.tfvars
+
 # IDE
 .vscode/
 .idea/
 *.swp
 *.swo
 *~
-
-# OS
 .DS_Store
 Thumbs.db
 
-# Local environment files
+# Environment variables
 .env
 .env.local
-*.local.tfvars

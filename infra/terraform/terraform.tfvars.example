@@ -1,0 +1,83 @@
+# Example Terraform Variables Configuration
+# Copy this file to terraform.tfvars and customize for your environment
+# DO NOT commit terraform.tfvars to Git - it may contain sensitive data
+
+# AWS region for resource deployment
+# Free tier friendly regions: us-east-1, us-west-2, eu-west-1
+# Avoid: ap-southeast-1, ap-northeast-1 (higher costs)
+aws_region = "us-east-1"
+
+# Project name used in resource naming and tagging
+# Will appear in: bucket name, table name, role name, etc.
+# Format: lowercase, alphanumeric, hyphens
+project_name = "claimsops"
+
+# Environment classification for resource tagging and organization
+# Valid values: dev (development), staging (pre-production), prod (production)
+# Typically: dev for testing, staging for UAT, prod for live
+environment = "dev"
+
+# S3 versioning enables keeping old versions of objects
+# IMPACT ON COSTS: Disabled saves money (old versions cost $0.23/GB-month)
+# TRADEOFF: No data recovery if object is overwritten
+# Set to true ONLY if you need version history and can afford the cost
+enable_versioning = false
+
+# DynamoDB billing mode determines how you pay for capacity
+# Valid values: 
+#   - PAY_PER_REQUEST: Pay for each read/write (great for unpredictable load)
+#   - PROVISIONED: Pay hourly for reserved capacity (better for predictable load)
+# IMPORTANT FOR FREE TIER: Always use PAY_PER_REQUEST on free tier
+dynamodb_billing_mode = "PAY_PER_REQUEST"
+
+
+# ==========================================
+# ADVANCED OPTIONS (Optional)
+# ==========================================
+
+# Enable DynamoDB point-in-time recovery
+# COST IMPACT: Minimal for dev, can add cost in production
+# BENEFIT: Can recover data from any point in last 35 days
+# Disabled by default to minimize free tier costs
+# enable_point_in_time_recovery = false
+
+# Enable DynamoDB time-to-live (TTL) for automatic item expiration
+# COST IMPACT: No additional cost, saves storage by auto-deleting old items
+# BENEFIT: Automatically remove old audit logs, temporary data, etc.
+# Disabled by default (enable when needed)
+# enable_dynamodb_ttl = false
+
+# DynamoDB TTL attribute name (only used if enable_dynamodb_ttl = true)
+# Define which attribute stores the Unix timestamp for auto-deletion
+# Example: items created > 30 days ago are automatically deleted
+# dynamodb_ttl_attribute = "ttl"
+
+# S3 bucket name override
+# By default: "claimsops-exports-{ACCOUNT_ID}"
+# Set custom name ONLY if you have a specific requirement
+# IMPORTANT: S3 bucket names are globally unique across all AWS accounts
+# s3_bucket_name = ""
+
+
+# ==========================================
+# NOTES FOR SECURITY
+# ==========================================
+
+# 1. NEVER commit sensitive values:
+#    - AWS credentials (use aws configure or IAM roles instead)
+#    - Passwords or tokens
+#    - API keys
+
+# 2. For team environments:
+#    - Use Terraform Cloud or S3 remote backend for state
+#    - Use AWS Secrets Manager for sensitive values
+#    - Enable state file encryption
+
+# 3. For CI/CD pipelines:
+#    - Pass variables via environment variables: TF_VAR_variable_name=value
+#    - Use GitHub Secrets for sensitive vars
+#    - Never log or echo variable values
+
+# 4. Example: Using environment variables
+#    export TF_VAR_aws_region="us-west-2"
+#    terraform plan  # Will use us-west-2
