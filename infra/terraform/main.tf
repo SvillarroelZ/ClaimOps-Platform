@@ -31,3 +31,13 @@ module "s3" {
   block_public_access = true
   enable_encryption   = true
 }
+
+module "dynamodb" {
+  source = "./modules/dynamodb"
+
+  project_name                  = var.project_name
+  environment                   = var.environment
+  billing_mode                  = var.dynamodb_billing_mode
+  enable_point_in_time_recovery = false
+  enable_ttl                    = false
+}
