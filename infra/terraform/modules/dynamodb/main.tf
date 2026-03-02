@@ -1,5 +1,7 @@
 resource "aws_dynamodb_table" "main" {
-  name           = var.table_name != "" ? var.table_name : "${var.project_name}-events"
+  count = var.enable_resources ? 1 : 0
+
+  name           = var.table_name != "" ? var.table_name : "${var.project_name}-audit-events"
   billing_mode   = var.billing_mode
   hash_key       = var.partition_key
   range_key      = var.sort_key

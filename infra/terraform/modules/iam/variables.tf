@@ -13,3 +13,9 @@ variable "environment" {
   description = "Environment name"
   type        = string
 }
+
+variable "enable_resources" {
+  description = "Safety guard to prevent resource creation. Set to true to actually create resources"
+  type        = bool
+  default     = false
+}
