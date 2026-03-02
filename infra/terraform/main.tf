@@ -14,5 +14,10 @@
   Free Tier guardrails are enforced in variables.tf and module configurations.
 */
 
-# The actual resource definitions will be added via feature branches.
-# This file serves as the entry point for Terraform deployments.
+module "iam" {
+  source = "./modules/iam"
+
+  role_name    = "${var.project_name}-deployment-role"
+  project_name = var.project_name
+  environment  = var.environment
+}
