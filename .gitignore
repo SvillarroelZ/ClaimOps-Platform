@@ -6,7 +6,6 @@ terraform.tfstate.*
 
 # Terraform directories (contains provider binaries)
 .terraform/
-.terraform.lock.hcl
 
 # Terraform plan files
 *.tfplan
