@@ -1,4 +1,6 @@
 resource "aws_iam_role" "deployment_role" {
+  count = var.enable_resources ? 1 : 0
+
   name = var.role_name
   assume_role_policy = jsonencode({
     Version = "2012-10-17"
@@ -21,8 +23,10 @@ resource "aws_iam_role" "deployment_role" {
 }
 
 resource "aws_iam_role_policy" "deployment_policy" {
+  count = var.enable_resources ? 1 : 0
+
   name = "${var.role_name}-policy"
-  role = aws_iam_role.deployment_role.id
+  role = aws_iam_role.deployment_role[0].id
   policy = jsonencode({
     Version = "2012-10-17"
     Statement = [

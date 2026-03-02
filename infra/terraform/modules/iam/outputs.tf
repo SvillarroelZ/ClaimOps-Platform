@@ -1,11 +1,11 @@
 output "deployment_role_arn" {
   description = "ARN of the deployment IAM role"
-  value       = aws_iam_role.deployment_role.arn
+  value       = var.enable_resources ? aws_iam_role.deployment_role[0].arn : ""
 }
 
 output "deployment_role_name" {
   description = "Name of the deployment IAM role"
-  value       = aws_iam_role.deployment_role.name
+  value       = var.enable_resources ? aws_iam_role.deployment_role[0].name : ""
 }
 
 output "account_id" {

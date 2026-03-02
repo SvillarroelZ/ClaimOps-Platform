@@ -31,3 +31,9 @@ variable "block_public_access" {
   type        = bool
   default     = true
 }
+
+variable "enable_resources" {
+  description = "Safety guard to prevent resource creation. Set to true to actually create resources"
+  type        = bool
+  default     = false
+}

@@ -47,3 +47,9 @@ variable "dynamodb_billing_mode" {
     error_message = "DynamoDB billing mode must be 'PROVISIONED' or 'PAY_PER_REQUEST'. Received: '${var.dynamodb_billing_mode}'"
   }
 }
+
+variable "enable_resources" {
+  description = "SAFETY GUARD: Set to false to prevent resource creation during terraform apply. Must be explicitly set to true to create AWS resources. Default is false for study/validation purposes"
+  type        = bool
+  default     = false
+}
