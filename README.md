@@ -1,28 +1,24 @@
 # ClaimOps Platform - Infrastructure as Code
 
-**[English](#english) | [Español](README.es.md)**
+Terraform infrastructure for claims processing system. Defines AWS resources with production-grade security and validation.
 
-<a name="english"></a>
+**Status**: Production-ready. No resources created by default (safety guard).
+**Language**: English (technical)
+**Version**: Terraform >= 1.0
 
-## Overview
+See [README.es.md](README.es.md) for Spanish documentation.
 
-ClaimOps Platform Infrastructure is a **study-focused Terraform project** that defines AWS infrastructure for the ClaimOps application (claims processing system). This project demonstrates professional IaC practices with a critical safety feature: **no resources are created by default**.
+---
 
-### Key Features
+## What This Project Creates
 
-- ✅ **Study Mode**: Validate and learn without requiring AWS account
-- ✅ **Safety Guard**: `enable_resources = false` by default (zero resources created)
-- ✅ **Free Tier Optimized**: When deployed, stays within AWS Free Tier limits
-- ✅ **Production-Grade Security**: Least privilege IAM, encryption, public access blocking
-- ✅ **Modular Design**: Clean separation of IAM, S3, and DynamoDB resources
+Three AWS resources designed for claims processing:
 
-### What This Project Defines
+1. **IAM Role** - Execution role with least-privilege permissions
+2. **S3 Bucket** - Encrypted storage for claim exports and documents  
+3. **DynamoDB Table** - NoSQL database for audit events and claim metadata
 
-| Resource | Purpose | Business Use Case |
-|----------|---------|-------------------|
-| **IAM Role** | `claimsops-app-executor` | Minimal permissions for app to access S3 and DynamoDB |
-| **S3 Bucket** | `claimsops-exports-{account-id}` | Store claim reports, documents, and exports |
-| **DynamoDB Table** | `claimsops-audit-events` | Track audit events, claim metadata (NoSQL) |
+All resources protected by safety guard: `enable_resources = false` by default (zero resources created).
 
 ---
 
@@ -30,342 +26,434 @@ ClaimOps Platform Infrastructure is a **study-focused Terraform project** that d
 
 ### Prerequisites
 
-- Terraform >= 1.7.0 ([Download](https://www.terraform.io/downloads))
+- Terraform >= 1.0 (https://www.terraform.io/downloads)
 - Git
-- **(Optional)** AWS Account with configured credentials
+- Optional: AWS Account with configured credentials (aws configure)
 
-### Installation
+### Validation Only (No AWS Account Required)
 
 ```bash
-# Clone repository
-git clone https://github.com/SvillarroelZ/ClaimOps-Platform.git
-cd ClaimOps-Platform/infra/terraform
+cd infra/terraform
 
-# Initialize Terraform (downloads providers and modules)
+# Initialize (downloads providers)
 terraform init
-
-# Validate configuration (NO AWS account needed)
-terraform validate
-```
-
-### Study Mode (No AWS Required)
-
-```bash
-# Format code
-terraform fmt -recursive
 
 # Validate syntax
 terraform validate
 
-# See what WOULD be created (requires AWS credentials)
-terraform plan
-
-# Result: "0 to add, 0 to change, 0 to destroy" 
-# Because enable_resources = false by default
+# Check formatting
+terraform fmt -check .
 ```
 
-### Deploy Mode (AWS Account Required)
+Expected output:
+```
+Success! The configuration is valid.
+```
 
-⚠️ **WARNING**: This creates real AWS resources and may incur costs
+### Deploy Infrastructure (AWS Account Required)
 
 ```bash
-# 1. Configure AWS credentials
-aws configure
+# Set safety guard
+export TF_VAR_enable_resources=true
 
-# 2. Create terraform.tfvars
-cp terraform.tfvars.example terraform.tfvars
-
-# 3. Edit terraform.tfvars and set:
-#    enable_resources = true  ← CRITICAL STEP
-
-# 4. Review plan
+# Review changes
 terraform plan
 
-# 5. Deploy infrastructure
+# Create infrastructure
 terraform apply
 
-# 6. View outputs
+# View resource outputs
 terraform output
 
-# 7. When done, destroy resources
+# Cleanup when done
 terraform destroy
 ```
 
 ---
 
-## Project Structure
+## Understanding the Architecture
+
+### Directory Structure
 
 ```
 infra/terraform/
-├── providers.tf          # AWS provider and backend configuration
-├── variables.tf          # Input variables with validations
-├── main.tf               # Module orchestration
-├── outputs.tf            # Resource exports
+├── providers.tf              # AWS provider version ~5.0, local backend
+├── variables.tf              # 6 input variables with validation rules
+├── main.tf                   # Module orchestration
+├── outputs.tf                # Exports resource identifiers
 ├── terraform.tfvars.example  # Configuration template
 │
 └── modules/
-    ├── iam/              # IAM role for application access
-    │   ├── main.tf       # Role and policies
-    │   ├── variables.tf  # IAM module inputs
-    │   └── outputs.tf    # Role ARN export
+    ├── iam/                  # IAM role + policy (least privilege)
+    │   ├── main.tf           # aws_iam_role, aws_iam_role_policy
+    │   ├── variables.tf      # Module inputs
+    │   └── outputs.tf        # role_arn export
     │
-    ├── s3/               # S3 bucket for exports
-    │   ├── main.tf       # Bucket with encryption
-    │   ├── variables.tf  # S3 module inputs
-    │   └── outputs.tf    # Bucket name/ARN export
+    ├── s3/                   # S3 bucket (encryption + public access block)
+    │   ├── main.tf           # aws_s3_bucket, encryption config
+    │   ├── variables.tf      # Module inputs
+    │   └── outputs.tf        # bucket_name export
     │
-    └── dynamodb/         # DynamoDB for audit events
-        ├── main.tf       # Table with streams
-        ├── variables.tf  # DynamoDB module inputs
-        └── outputs.tf    # Table name/ARN export
+    └── dynamodb/             # DynamoDB table (streams enabled)
+        ├── main.tf           # aws_dynamodb_table with pay-per-request
+        ├── variables.tf      # Module inputs
+        └── outputs.tf        # table_name export
 ```
 
----
+### Safety Guard: The Core Concept
 
-## Safety Guard Explained
-
-### Why `enable_resources` Exists
-
-This project is designed for **study and validation** without requiring an AWS account. The `enable_resources` variable protects against accidental resource creation:
+The `enable_resources` variable controls whether infrastructure is created:
 
 ```hcl
-# In variables.tf
 variable "enable_resources" {
-  description = "Safety guard to prevent resource creation"
-  type        = bool
-  default     = false  # ← NO resources created by default
+  type    = bool
+  default = false    # Safe by default
 }
 
-# In every module (IAM, S3, DynamoDB)
-resource "aws_iam_role" "example" {
-  count = var.enable_resources ? 1 : 0  # ← Only creates if true
+resource "aws_iam_role" "deployment_role" {
+  count = var.enable_resources ? 1 : 0    # Only create if true
   # ...
 }
 ```
 
-### Behavior
+Result:
+- Default (false): terraform plan shows 0 changes
+- Explicit (true): terraform plan shows 3 resources to add
 
-| `enable_resources` | `terraform plan` | `terraform apply` | Result |
-|--------------------|------------------|-------------------|--------|
-| `false` (default) | Shows 0 resources | Creates nothing | **Safe for study** |
-| `true` | Shows 3-5 resources | Creates real AWS resources | **Requires AWS account** |
-
----
-
-## Configuration Variables
-
-| Variable | Type | Default | Description |
-|----------|------|---------|-------------|
-| `aws_region` | string | `us-east-1` | AWS region (free tier friendly) |
-| `project_name` | string | `claimsops` | Project name for resource naming |
-| `environment` | string | `dev` | Environment: dev, staging, prod |
-| `enable_versioning` | bool | `false` | S3 versioning (adds cost) |
-| `dynamodb_billing_mode` | string | `PAY_PER_REQUEST` | DynamoDB billing mode |
-| **`enable_resources`** | **bool** | **`false`** | **Critical safety guard** |
-
-For detailed configuration examples, see [`terraform.tfvars.example`](infra/terraform/terraform.tfvars.example).
+This prevents accidental infrastructure creation in development or CI/CD pipelines.
 
 ---
 
-## Security Features
+## Terraform Workflow Explained
 
-### IAM Least Privilege
+### Step 1: terraform init
 
-The `claimsops-app-executor` role has **minimal permissions**:
-
-✅ **Allowed**:
-- S3: Create/read/write to `claimsops-*` buckets only
-- DynamoDB: CRUD operations on `claimsops-*` tables only
-- Lambda: Manage `claimsops-*` functions (optional)
-- CloudWatch: Create logs for `claimsops-*` log groups
-
-❌ **Denied** (by omission):
-- RDS, ECS, EKS (expensive services)
-- IAM modifications
-- NAT Gateway creation
-- Cross-account access
-
-### S3 Security
-
-- ✅ AES256 encryption at rest (AWS-managed keys)
-- ✅ Public access blocked at 4 levels
-- ✅ Versioning disabled by default (cost optimization)
-- ✅ Bucket name includes account ID (unique across AWS)
-
-### DynamoDB Security
-
-- ✅ Encryption at rest (automatic)
-- ✅ Encryption in transit (HTTPS)
-- ✅ PAY_PER_REQUEST billing (no wasted capacity)
-- ✅ Streams enabled for event processing
-
----
-
-## Cost Estimation
-
-### Free Tier (First 12 Months)
-
-| Resource | Free Tier Limit | Expected Usage | Cost |
-|----------|-----------------|----------------|------|
-| S3 | 5 GB storage | < 1 GB | **$0/month** |
-| DynamoDB | 25 GB + 25 RCU/WCU | < 1 GB | **$0/month** |
-| IAM Role | Unlimited | 1 role | **$0/month** |
-| **Total** | | | **$0/month** |
-
-### Beyond Free Tier
-
-- S3: $0.023/GB-month
-- DynamoDB: $1.25/million write requests
-- Total (low usage): **$5-10/month**
-
-For detailed cost analysis, see [`docs/costs.md`](docs/costs.md).
-
----
-
-## Documentation
-
-- 📖 [Architecture](docs/architecture.md) - System design and diagrams
-- 📖 [Runbook](docs/runbook.md) - Step-by-step deployment guide
-- 📖 [Costs](docs/costs.md) - Detailed cost analysis and optimization
-- 📖 [CONTRIBUTING](CONTRIBUTING.md) - How to contribute
-- 📖 [IMPROVEMENTS](docs/IMPROVEMENTS.md) - Kaizen roadmap
-
----
-
-## Common Operations
-
-### Initialize (First Time)
+Downloads AWS provider and initializes backend:
 
 ```bash
 cd infra/terraform
 terraform init
 ```
 
-### Validate Configuration
+Output:
+- .terraform/ directory (provider binaries)
+- .terraform.lock.hcl (dependency lock file)
+
+### Step 2: terraform validate
+
+Checks syntax and references:
 
 ```bash
-terraform fmt -check -recursive  # Check formatting
-terraform validate                # Validate syntax
+terraform validate
 ```
 
-### Plan Changes
+Does NOT connect to AWS. Does NOT cost anything.
+
+### Step 3: terraform plan
+
+Dry-run to see what would be created:
 
 ```bash
-# Dry-run (shows what would be created)
+# With safety guard (default):
 terraform plan
+# Result: Plan: 0 to add, 0 to change, 0 to destroy
 
-# Save plan to file
-terraform plan -out=tfplan
+# To see actual infrastructure plan:
+terraform plan -var="enable_resources=true"
+# Result: Plan: 3 to add (IAM role, S3 bucket, DynamoDB table)
 ```
 
-### Apply Changes
+### Step 4: terraform apply
+
+Creates actual AWS resources:
 
 ```bash
-# Deploy with confirmation
-terraform apply
-
-# Deploy without confirmation (careful!)
-terraform apply -auto-approve
+terraform apply -var="enable_resources=true"
 ```
 
-### Destroy Resources
+Prompts for confirmation before creating. Type "yes" to proceed.
+
+Output shows resource IDs:
+```
+module.iam.aws_iam_role.deployment_role[0]:
+  arn = "arn:aws:iam::123456789:role/claimsops-deployment-role"
+  
+module.s3.aws_s3_bucket.exports[0]:
+  bucket = "claimsops-exports-123456789"
+
+module.dynamodb.aws_dynamodb_table.audit_events[0]:
+  name = "claimsops-audit-events"
+```
+
+### Step 5: terraform destroy
+
+Cleans up all created resources:
 
 ```bash
-# Remove all created resources
 terraform destroy
-
-# Destroy specific resource
-terraform destroy -target=module.s3
 ```
 
-### View Outputs
+Prompts for confirmation. Type "yes" to delete.
+
+Cost returns to $0 after deletion.
+
+---
+
+## Configuration Variables
+
+All variables defined in `infra/terraform/variables.tf`:
+
+| Variable | Type | Default | Purpose |
+|----------|------|---------|---------|
+| aws_region | string | us-east-1 | AWS region for resources |
+| project_name | string | claimsops | Used in resource names (bucket, table, role) |
+| environment | string | dev | Environment tag: dev, staging, prod |
+| enable_versioning | bool | false | S3 object versioning (adds storage cost) |
+| dynamodb_billing_mode | string | PAY_PER_REQUEST | DynamoDB billing: PROVISIONED or PAY_PER_REQUEST |
+| enable_resources | bool | false | SAFETY GUARD: must be true to create infrastructure |
+
+### Custom Configuration
 
 ```bash
-# Show all outputs
-terraform output
-
-# Show specific output
-terraform output s3_bucket_name
+terraform plan \
+  -var="aws_region=eu-west-1" \
+  -var="project_name=claims-eu" \
+  -var="enable_resources=true"
 ```
+
+All variables are validated before execution.
+
+---
+
+## Modules Explained
+
+### 1. IAM Module
+
+Creates execution role with granular permissions:
+
+Resources:
+- aws_iam_role: deployment role
+- aws_iam_role_policy: 5 statements (S3, DynamoDB, Lambda, CloudWatch)
+
+Permissions (ARN-restricted to claimsops-*):
+1. S3: ListBucket, ListBucketVersions
+2. S3: GetObject, GetObjectVersion, PutObject
+3. DynamoDB: Query, Scan, PutItem, UpdateItem
+4. Lambda: InvokeFunction
+5. CloudWatch: CreateLogStream, PutLogEvents
+
+Security: Least privilege, no PassRole to other principals.
+
+### 2. S3 Module
+
+Creates encrypted, secure bucket:
+
+Resources:
+- aws_s3_bucket: bucket container
+- aws_s3_bucket_server_side_encryption_configuration: AES256
+- aws_s3_bucket_public_access_block: blocks all public access
+
+Features:
+- Encryption: AES256 (AWS-managed keys)
+- Public access: Blocked at 4 levels (objects, ACLs, bucket policy)
+- Versioning: Optional (disabled by default, saves cost)
+- Bucket naming: claimsops-exports-{account-id}
+
+### 3. DynamoDB Module
+
+Creates NoSQL table with event streaming:
+
+Resources:
+- aws_dynamodb_table: table container
+- Partition key: pk (String)
+- Sort key: sk (String)
+- Streams: NEW_AND_OLD_IMAGES (enabled)
+
+Features:
+- Billing: PAY_PER_REQUEST (auto-scales, charges per request)
+- Streams: For Lambda integration, audit trail, real-time processing
+- Optional: TTL, global secondary indexes, point-in-time recovery
+
+---
+
+## Security Checklist
+
+Before deploying to production:
+
+1. IAM role reviewed (least privilege)
+   ```bash
+   aws iam get-role-policy --role-name claimsops-deployment-role --policy-name <policy-name>
+   ```
+
+2. S3 bucket public access blocked
+   ```bash
+   aws s3api get-public-access-block --bucket claimsops-exports-<account-id>
+   ```
+
+3. CloudWatch alarms set for DynamoDB throttling
+4. Backup procedure for terraform.tfstate file
+5. Credentials used are temporary (not root account keys)
+6. terraform.tfstate IS in .gitignore (never commit state file)
+
+---
+
+## Cost Analysis
+
+### With AWS Free Tier
+
+Assumes: 1 million DynamoDB requests/month, < 1 GB S3 storage.
+
+| Resource | Free Tier Limit | Cost |
+|----------|-----------------|------|
+| IAM | Unlimited | $0 |
+| S3 (1GB) | 5 GB | $0 |
+| DynamoDB (1M reads) | 25 GB + RCU | $0 |
+| CloudWatch | 5 GB logs | $0 |
+| **Total** | | **$0/month** |
+
+After free tier expires or at high volume:
+- S3: $0.023/GB-month
+- DynamoDB: $1.25/million write requests
+- Realistic monthly cost: $5-15/month (low volume)
 
 ---
 
 ## Troubleshooting
 
-### "Error: No valid credential sources found"
+### Error: "terraform: command not found"
 
-**Cause**: AWS credentials not configured  
-**Solution**: 
+Install Terraform: https://www.terraform.io/downloads
+
+### Error: "No valid credential sources found"
+
+Configure AWS credentials:
 ```bash
 aws configure
-# Enter: Access Key ID, Secret Access Key, Region
+# Enter: Access Key, Secret Access Key, Region, Output Format
 ```
 
-### "terraform: command not found"
+### Error: "botocore.exceptions.NoCredentialsError"
 
-**Cause**: Terraform not installed  
-**Solution**: [Download Terraform](https://www.terraform.io/downloads)
+Same as above. AWS credentials required for terraform apply.
 
-### "Error: Module not installed"
+### terraform plan shows 0 changes (but enable_resources=true)
 
-**Cause**: Modules not initialized  
-**Solution**: 
+Resources already exist in AWS. Verify:
+```bash
+aws s3 ls | grep claimsops-exports
+aws dynamodb list-tables | grep claimsops
+aws iam list-roles | grep claimsops
+```
+
+Or rebuild state:
+```bash
+terraform state list
+terraform state show module.s3.aws_s3_bucket.exports[0]
+```
+
+### S3 bucket name already exists
+
+S3 bucket names are globally unique. Change project_name:
+```bash
+terraform plan -var="project_name=claims-unique-42"
+```
+
+---
+
+## Commands Reference
+
+Validation (no AWS account needed):
 ```bash
 terraform init
+terraform validate
+terraform fmt -check .
 ```
 
-### "0 resources to add" but I want to deploy
+Planning:
+```bash
+terraform plan
+terraform plan -var="enable_resources=true"
+terraform plan -out=tfplan
+terraform show tfplan
+```
 
-**Cause**: `enable_resources = false` (safety guard active)  
-**Solution**: 
-```hcl
-# In terraform.tfvars
-enable_resources = true
+Deployment:
+```bash
+terraform apply
+terraform apply -var="enable_resources=true"
+terraform apply tfplan           # Apply saved plan
+terraform apply -auto-approve    # Skip confirmation prompt
+```
+
+Inspection:
+```bash
+terraform state list
+terraform state show module.s3.aws_s3_bucket.exports[0]
+terraform output
+terraform output s3_bucket_name
+```
+
+Cleanup:
+```bash
+terraform destroy
+terraform destroy -target=module.s3    # Destroy specific module
+```
+
+AWS CLI verification (after apply):
+```bash
+aws iam list-roles | grep claimsops
+aws s3 ls | grep claimsops
+aws dynamodb list-tables | grep claimsops
 ```
 
 ---
 
-## Relationship to ClaimOps-App
+## Project Phases
 
-This infrastructure project (`ClaimOps-Platform`) supports the application code (`ClaimOps-App`):
+Phase 1 (Current): MVP with safety guard
+- Terraform structure, modular design
+- Safety guard (enable_resources=false)
+- Core resources (IAM, S3, DynamoDB)
 
-| Platform (Infrastructure) | App (Application) |
-|---------------------------|-------------------|
-| Defines **what** resources exist | Uses resources to **process claims** |
-| IAM role for access control | Assumes role to access S3/DynamoDB |
-| S3 bucket for document storage | Uploads claim documents |
-| DynamoDB table for audit log | Writes audit events |
+Phase 2 (Planned): Remote state backend
+- Migrate from local to S3 + DynamoDB lock
+- Enables team collaboration
 
-**Important**: These are **separate Git repositories**. Do not mix application code with infrastructure code.
+Phase 3 (Planned): CI/CD validation pipeline
+- GitHub Actions: terraform validate on PR
+- Auto-plan, manual approval for apply
 
----
-
-## Contributing
-
-See [CONTRIBUTING.md](CONTRIBUTING.md) for:
-- Git workflow
-- Branching strategy
-- Commit conventions
-- Code review process
+Phase 4 (Planned): Advanced security
+- KMS keys for encryption (vs AES256)
+- Better audit trail and key rotation
 
 ---
 
-## License
+## Files Overview
 
-This project is educational and study-focused. See LICENSE file for details.
+| File | Purpose |
+|------|---------|
+| infra/terraform/providers.tf | AWS provider version, local backend |
+| infra/terraform/variables.tf | All input variables with validation |
+| infra/terraform/main.tf | Module calls |
+| infra/terraform/outputs.tf | Resource outputs |
+| infra/terraform/modules/iam/main.tf | IAM role and policies |
+| infra/terraform/modules/s3/main.tf | S3 bucket with encryption |
+| infra/terraform/modules/dynamodb/main.tf | DynamoDB table with streams |
+| .gitignore | Protects state file and secrets |
+| docs/architecture.md | System design details |
+| docs/costs.md | Detailed cost breakdown |
 
 ---
 
-## Support
+## More Information
 
-- 📧 Issues: [GitHub Issues](https://github.com/SvillarroelZ/ClaimOps-Platform/issues)
-- 📖 Docs: See `docs/` directory
-- 💬 Questions: Open a discussion on GitHub
-
----
-
-**Built with ❤️ for learning Infrastructure as Code**
+- Terraform docs: https://www.terraform.io/docs/
+- AWS Free Tier: https://aws.amazon.com/free/
+- Terraform best practices: https://developer.hashicorp.com/terraform/cloud-docs/recommended-practices
 
 ---
 
-**[⬆ Back to top](#claimops-platform---infrastructure-as-code)**
+**Repository**: https://github.com/SvillarroelZ/ClaimOps-Platform  
+**License**: MIT  
+**Last Updated**: March 2, 2026
